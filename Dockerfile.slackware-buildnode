@@ -1,0 +1,96 @@
+# Slackware Build Node contains compiler toolchains and utils
+# required to build software.
+# We build it on top of a minimal Slackware i.e. with minimal dependencies.
+
+# Note that ARG is the only keyword that's allowed before FROM:
+ARG SL_ARCH="amd64"
+ARG SL_ARCHSUFF="64"
+ARG SL_VERSION="14.2"
+ARG SL_IMAGE="liveslak/slackware:base_${SL_ARCH}_${SL_VERSION}"
+
+FROM "${SL_IMAGE}"
+MAINTAINER Eric Hameleers <alien@slackware.com>
+
+# ARG defined before FROM cannot be used after FROM:
+ARG SL_UID="1000"
+ARG SL_GID="users"
+ARG SL_USER="live"
+
+# Install compiler toolchain and supporting tools.
+# Note that not all of these will be available on Slackware < 15.0,
+# I made the package list so that it gives you a functional environment
+# both on Slackware 14.2 and 15.0:
+RUN rm -f /etc/slackpkg/templates/compilertoolchain.template
+RUN for PKG in \
+  bison \
+  ca-certificates \
+  curl \
+  cyrus-sasl \
+  flex \
+  gc \
+  gcc \
+  gcc-g++ \
+  gcc-gnat \
+  gcc-go \
+  gcc-objc \
+  gccmakedep \
+  git \
+  glibc \
+  glibc-profile \
+  glibc-zoneinfo \
+  guile \
+  intltool \
+  kernel-headers \
+  libmpc \
+  libffi \
+  libtasn1 \
+  llvm \
+  make \
+  mpfr \
+  nettle \
+  p11-kit \
+  perl \
+  python-pip \
+  python-setuptools \
+  python \
+  python2 \
+  python3 \
+  python-appdirs \
+  python-certifi \
+  python-chardet \
+  python-charset-normalizer \
+  python-distro \
+  python-dnspython \
+  python-docutils \
+  python-future \
+  python-idna \
+  python-markdown \
+  python-notify2 \
+  python-packaging \
+  python-pillow \
+  python-ply \
+  python-pygments \
+  python-random2 \
+  python-requests \
+  python-six \
+  python-urllib3 \
+  python2-module-collection \
+  ; do echo $PKG >> /etc/slackpkg/templates/compilertoolchain.template ; done
+
+# Refresh SSL certificates:
+RUN /usr/sbin/update-ca-certificates -f
+
+# Update slackpkg database:
+RUN slackpkg -batch=on -default_answer=y update gpg
+RUN slackpkg -batch=on -default_answer=y update
+RUN slackpkg -batch=on -default_answer=y install-template compilertoolchain
+
+# Create the user to switch to:
+RUN useradd -m -u "${SL_UID}" -g "${SL_GID}" -G wheel "${SL_USER}" && \
+    sed -ri 's/^# (%wheel.*NOPASSWD.*)$/\1/' /etc/sudoers
+USER "${SL_USER}"
+ENV HOME /home/"${SL_USER}"
+WORKDIR /home/"${SL_USER}"
+
+# Start a bash shell if the container user does not provide a command:
+CMD bash -l

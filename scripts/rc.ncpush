@@ -1,0 +1,89 @@
+#!/bin/bash
+
+# Description: Push daemon for NextCloud clients.
+# Needs: redis php-fpm mariadb
+# Needs to be fronted by a reverse proxy (apache or nginx)
+# Written by: Eric Hameleers <alien@slackware.com> 2021
+
+daemon=/usr/bin/daemon
+
+description="Push daemon for Nextcloud clients"
+pidfile=${pidfile:-/var/run/nextcloud/notify_push.pid}
+
+ncconfig=${ncconfig:-/var/www/htdocs/nextcloud/config/config.php}
+
+command=${command:-/opt/nextcloud/localapps/notify_push/bin/x86_64/notify_push}
+command_user=${command_user:-apache}
+command_args="--bind 127.0.0.1 --port 7867 $ncconfig"
+
+[ ! -x $command ] && exit 99
+[ ! -f $ncconfig ] && exit 99
+
+RETVAL=0
+
+start() {
+  if [ -e "$pidfile" ]; then
+    echo "$description already started!"
+  else
+    echo -n "Starting $description: "
+    mkdir -p $(dirname $pidfile)
+    chown $command_user $(dirname $pidfile)
+    chmod 0770  $(dirname $pidfile)
+    $daemon -S -u $command_user -F $pidfile -- $command $command_args
+    RETVAL=$?
+    [ $RETVAL -eq 0 ] && touch /var/lock/subsys/$(basename $command)
+    echo "- done."
+  fi
+}
+
+stop(){
+    echo -n "Stopping $description: "
+    kill -TERM $(cat $pidfile)
+    RETVAL=$?
+    [ $RETVAL -eq 0 ] && rm -f /var/lock/subsys/$(basename $command)
+    echo "- done."
+}
+
+restart(){
+    stop
+    start
+}
+
+condrestart(){
+    [ -e /var/lock/subsys/$(basename $command) ] && restart
+}
+
+status() {
+  pids=$(cat $pidfile 2>/dev/null)
+  if test "$pids" ; then
+    echo "$description is running."
+    ps up $pids
+  else
+    echo "$description is stopped."
+  fi
+}
+
+# See how we were called.
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    status)
+        status /usr/bin/pesign
+        ;;
+    restart)
+        restart
+        ;;
+    condrestart)
+        condrestart
+        ;;
+    *)
+        echo "Usage: pesign {start|stop|status|restart|condrestart}"
+        RETVAL=1
+esac
+
+exit $RETVAL
+
